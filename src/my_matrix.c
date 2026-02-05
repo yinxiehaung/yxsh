@@ -128,3 +128,22 @@ void mat_zero(matrix_t *dst) {
   assert(dst != NULL && dst->data != NULL);
   memset(dst->data, 0, sizeof(mat_data_type) * dst->cols * dst->rows);
 }
+
+void mat_sum_rows(matrix_t *dst, matrix_t *src) {
+  assert(dst != NULL && src != NULL);
+  assert(dst->rows == 1 && dst->cols == src->cols);
+  for (ui64 row = 0; row < src->rows; row++) {
+    for (ui64 col = 0; col < src->cols; col++) {
+      MAT_AT(dst, 0, col) += MAT_AT(src, row, col);
+    }
+  }
+}
+
+matrix_t mat_slice(matrix_t *m, ui64 start_row, ui64 count) {
+  assert(start_row + count <= m->rows);
+  matrix_t slice;
+  slice.rows = count;
+  slice.cols = m->cols;
+  slice.data = m->data + (start_row * m->cols);
+  return slice;
+}

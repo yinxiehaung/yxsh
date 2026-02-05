@@ -1,5 +1,6 @@
 #ifndef MY_NN_H
 #define MY_NN_H
+#include "my_arena.h"
 #include "my_matrix.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -32,4 +33,6 @@ nn_t nn_alloc_grads(mem_arena_t *, ui64 *, ui64, char *);
 void nn_print(nn_t *nn);
 void nn_zero(nn_t *);
 void nn_train(mem_arena_t *, nn_t *, matrix_t *, matrix_t *, nn_cfg_t *);
+void nn_backprop(mem_arena_t *, nn_t *, nn_t *, matrix_t *);
+void nn_learn(nn_t *, nn_t *, mat_data_type);
 #endif

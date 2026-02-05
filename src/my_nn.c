@@ -10,6 +10,16 @@ static void mat_act(matrix_t *mat) {
     }
   }
 }
+static void mat_add_bias(matrix_t *mat, matrix_t *bias) {
+  assert(mat != NULL && bias != NULL);
+  assert(bias->rows == 1 && bias->cols == mat->cols);
+
+  for (ui64 r = 0; r < mat->rows; r++) {
+    for (ui64 c = 0; c < mat->cols; c++) {
+      MAT_AT(mat, r, c) += MAT_AT(bias, 0, c);
+    }
+  }
+}
 
 static ssize_t nn_alloc(mem_arena_t *arena, nn_t *nn, ui64 *arch,
                         ui64 arch_count, char *errbuf) {
@@ -27,15 +37,12 @@ static ssize_t nn_alloc(mem_arena_t *arena, nn_t *nn, ui64 *arch,
     nn->arch[i] = arch[i];
   }
   nn->arch_count = arch_count;
-  nn->as[0] = mat_init(arena, 1, arch[0], errbuf);
   for (ui64 i = 0; i < arch_count - 1; i++) {
     ui64 rows = arch[i];
     ui64 cols = arch[i + 1];
     nn->ws[i] = mat_init(arena, rows, cols, errbuf);
     nn->bs[i] = mat_init(arena, 1, cols, errbuf);
-    nn->as[i + 1] = mat_init(arena, 1, cols, errbuf);
-    if (nn->ws[i].data == NULL || nn->bs[i].data == NULL ||
-        nn->as[i + 1].data == NULL) {
+    if (nn->ws[i].data == NULL || nn->bs[i].data == NULL) {
       goto error;
     }
   }
@@ -76,13 +83,15 @@ nn_t nn_init(mem_arena_t *arena, ui64 *arch, ui64 arch_count, char *errbuf) {
 }
 
 matrix_t nn_forward(mem_arena_t *arena, nn_t *nn, matrix_t *x) {
-  ui64 col = x->cols;
   matrix_t curr;
-  mat_copy(&nn->as[0], x);
+  nn->as[0] = *x;
   curr = nn->as[0];
   for (ui64 i = 0; i < nn->count; i++) {
+    ui64 batch_size = curr.rows;
+    ui64 next_cols = nn->ws[i].cols;
+    nn->as[i + 1] = mat_init(arena, batch_size, next_cols, NULL);
     mat_mult(&nn->as[i + 1], &curr, &nn->ws[i]); // 2 * 2 1 * 2
-    mat_add(&nn->as[i + 1], &nn->bs[i], &nn->as[i + 1]);
+    mat_add_bias(&nn->as[i + 1], &nn->bs[i]);
     mat_act(&nn->as[i + 1]);
     curr = nn->as[i + 1];
   }
@@ -90,16 +99,18 @@ matrix_t nn_forward(mem_arena_t *arena, nn_t *nn, matrix_t *x) {
 }
 
 mat_data_type nn_cost(mem_arena_t *arena, nn_t *nn, matrix_t *train) {
+  mem_tmp_arena_t scope = arena_begin_tmp(arena);
   mat_data_type result = 0.0f;
   ui64 n = train->rows;
   for (ui64 i = 0; i < n; i++) {
     matrix_t x = mat_row_view(train, i, nn->ws[0].cols);
-    matrix_t y = nn_forward(arena, nn, &x);
+    matrix_t y = nn_forward(scope.arena, nn, &x);
     for (ui64 j = 0; j < y.cols; j++) {
       mat_data_type d = MAT_AT(train, i, j + nn->ws[0].cols) - MAT_AT(&y, 0, j);
       result += d * d;
     }
   }
+  arena_end_tmp(&scope);
   return result / n;
 }
 
@@ -187,14 +198,16 @@ void nn_backprop(mem_arena_t *arena, nn_t *nn, nn_t *grads, matrix_t *target) {
   assert(arena->capacity != 0);
 
   ui64 n = target->rows;
-
+  grads->as[nn->count] = mat_init(arena, n, nn->as[nn->count].cols, NULL);
   matrix_t *output_layer = &nn->as[nn->count];
   matrix_t *grad_output = &grads->as[nn->count];
 
-  for (ui64 j = 0; j < output_layer->cols; j++) {
-    mat_data_type activation = MAT_AT(output_layer, 0, j);
-    mat_data_type y_true = MAT_AT(target, 0, j);
-    MAT_AT(grad_output, 0, j) = (activation - y_true) * 2 / n;
+  for (ui64 i = 0; i < n; i++) {
+    for (ui64 j = 0; j < output_layer->cols; j++) {
+      mat_data_type activation = MAT_AT(output_layer, i, j);
+      mat_data_type y_true = MAT_AT(target, i, j);
+      MAT_AT(grad_output, i, j) = (activation - y_true) * 2 / n;
+    }
   }
 
   for (ui64 layer = nn->count - 1; layer != UINT64_MAX; layer--) {
@@ -227,11 +240,13 @@ void nn_backprop(mem_arena_t *arena, nn_t *nn, nn_t *grads, matrix_t *target) {
         mat_init(tmp_arena.arena, a_curr->cols, a_curr->rows, NULL);
     mat_transpose(&a_curr_t, a_curr);
     mat_mult(&grads->ws[layer], &a_curr_t, &delta_act);
-
-    matrix_t w_t = mat_init(tmp_arena.arena, w->cols, w->rows, NULL);
-    mat_transpose(&w_t, w);
-    mat_mult(delta_curr, &delta_act, &w_t);
-
+    if (layer > 0) {
+      grads->as[layer] = mat_init(arena, n, w->rows, NULL);
+      delta_curr = &grads->as[layer];
+      matrix_t w_t = mat_init(tmp_arena.arena, w->cols, w->rows, NULL);
+      mat_transpose(&w_t, w);
+      mat_mult(delta_curr, &delta_act, &w_t);
+    }
     arena_end_tmp(&tmp_arena);
   }
 }
@@ -244,22 +259,6 @@ void nn_learn(nn_t *nn, nn_t *grads, mat_data_type rate) {
   }
 }
 
-static void rand_indices(ui64 *indices, ui64 size) {
-  for (ui64 i = 0; i < size; i++) {
-    ui64 index = rand() % size;
-    ui64 tmp = indices[i];
-    indices[i] = indices[index];
-    indices[index] = tmp;
-  }
-}
-
-static void nn_add_grads(nn_t *grads, nn_t *tmp_grads) {
-  for (int i = 0; i < grads->count; i++) {
-    mat_add(&grads->ws[i], &grads->ws[i], &tmp_grads->ws[i]);
-    mat_add(&grads->bs[i], &grads->bs[i], &tmp_grads->bs[i]);
-  }
-}
-
 void nn_zero(nn_t *nn) {
   for (ui64 i = 0; i < nn->count; i++) {
     mat_zero(&nn->ws[i]);
@@ -267,6 +266,39 @@ void nn_zero(nn_t *nn) {
   }
 }
 
+static void _mat_swap_row(matrix_t *m, ui64 r1, ui64 r2,
+                          mat_data_type *temp_buf) {
+  if (r1 == r2)
+    return;
+  size_t row_size = m->cols * sizeof(mat_data_type);
+  mat_data_type *row1_ptr = m->data + (r1 * m->cols);
+  mat_data_type *row2_ptr = m->data + (r2 * m->cols);
+  memcpy(temp_buf, row1_ptr, row_size);
+  memcpy(row1_ptr, row2_ptr, row_size);
+  memcpy(row2_ptr, temp_buf, row_size);
+}
+
+static void mat_shuffle_rows(mem_arena_t *arena, matrix_t *input,
+                             matrix_t *target) {
+  assert(input->rows == target->rows);
+
+  mem_tmp_arena_t tmp_arena = arena_begin_tmp(arena);
+  mat_data_type *tmp_in =
+      arena_push_arr(*tmp_arena.arena, mat_data_type, input->cols, 1, NULL);
+
+  mat_data_type *tmp_tar =
+      arena_push_arr(*tmp_arena.arena, mat_data_type, target->cols, 1, NULL);
+  if (!tmp_in || !tmp_tar) {
+    fprintf(stderr, "arena failed in shuffle!\n");
+    exit(1);
+  }
+  for (ui64 i = input->rows - 1; i > 0; i--) {
+    ui64 j = rand() % (i + 1);
+    _mat_swap_row(input, i, j, tmp_in);
+    _mat_swap_row(target, i, j, tmp_tar);
+  }
+  arena_end_tmp(&tmp_arena);
+}
 void nn_train(mem_arena_t *arena, nn_t *nn, matrix_t *input, matrix_t *target,
               nn_cfg_t *cfg) {
   assert(nn != NULL && input != NULL && target != NULL && cfg != NULL);
@@ -275,34 +307,21 @@ void nn_train(mem_arena_t *arena, nn_t *nn, matrix_t *input, matrix_t *target,
   ui64 simples = target->rows;
 
   mem_tmp_arena_t epoch_scope = arena_begin_tmp(arena);
-  ui64 *indices = arena_push_arr(*epoch_scope.arena, ui64, simples, true, NULL);
-  for (ui64 i = 0; i < simples; i++) {
-    indices[i] = i;
-  }
-  nn_t batch_grads =
-      nn_alloc_grads(epoch_scope.arena, nn->arch, nn->arch_count, NULL);
-  nn_t simples_grads =
-      nn_alloc_grads(epoch_scope.arena, nn->arch, nn->arch_count, NULL);
   for (ui64 e = 0; e < cfg->epochs; e++) {
-    rand_indices(indices, simples);
+    mat_shuffle_rows(arena, input, target);
     for (ui64 s = 0; s < simples; s += cfg->batch_size) {
       mem_tmp_arena_t batch_scope = arena_begin_tmp(arena);
-      nn_zero(&batch_grads);
-      ui64 current_batch = 0;
-      for (ui64 b = 0; b < cfg->batch_size; b++) {
-        if (s + b >= simples)
-          break;
-        ui64 index = indices[s + b];
-        matrix_t x = mat_row_view(input, index, input->cols);
-        matrix_t y = mat_row_view(target, index, target->cols);
-        nn_forward(batch_scope.arena, nn, &x);
-        nn_backprop(batch_scope.arena, nn, &simples_grads, &y);
-        nn_add_grads(&batch_grads, &simples_grads);
-        current_batch++;
+      ui64 current_batch_size = cfg->batch_size;
+      if (s + current_batch_size > simples) {
+        current_batch_size = simples - s;
       }
-      if (current_batch > 0) {
-        nn_learn(nn, &batch_grads, cfg->rate / current_batch);
-      }
+      matrix_t batch_x = mat_slice(input, s, current_batch_size);
+      matrix_t batch_y = mat_slice(target, s, current_batch_size);
+      nn_forward(batch_scope.arena, nn, &batch_x);
+      nn_t batch_grads =
+          nn_alloc_grads(batch_scope.arena, nn->arch, nn->arch_count, NULL);
+      nn_backprop(batch_scope.arena, nn, &batch_grads, &batch_y);
+      nn_learn(nn, &batch_grads, cfg->rate);
       arena_end_tmp(&batch_scope);
     }
   }
