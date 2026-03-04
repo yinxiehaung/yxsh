@@ -297,7 +297,6 @@ char *__str_find_bmh(const string_t *s, const char *c, const ui64 c_len) {
     errno = STR_INVALARG;
     return NULL;
   }
-  // GNU C/Clang Extension
   int bad_char[256];
   for (int i = 0; i < 256; i++) {
     bad_char[i] = -1;
@@ -316,7 +315,7 @@ char *__str_find_bmh(const string_t *s, const char *c, const ui64 c_len) {
     if (j < 0) {
       return s->str + tmp;
     } else {
-      int offset = j - bad_char[s->str[tmp + j]];
+      int offset = j - bad_char[(unsigned char)s->str[tmp + j]];
       tmp += offset > 1 ? offset : 1;
     }
   }
