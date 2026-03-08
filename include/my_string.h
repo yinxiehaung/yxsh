@@ -105,8 +105,8 @@ void __str_print(const string_t *);
 #define str_new_static(x) (str_new((x), sizeof((x)) - 1))
 #define str_new_variable(x) (str_new((x), strlen(x)))
 
-#define str_new_static_in(areana, x) (str_new_in(arena, (x), sizeof((x)) - 1))
-#define str_new_variable_in(areana, x) (str_new_in(arena, (x), strlen(x)))
+#define str_new_static_in(arena, x) (str_new_in(arena, (x), sizeof((x)) - 1))
+#define str_new_variable_in(arena, x) (str_new_in(arena, (x), strlen(x)))
 
 #define str_cat_char_to_end(s1, c) (__str_cat_char_to(NULL, &s1, s1.len, c))
 #define str_cat_char_to_begin(s1, c) (__str_cat_char_to(NULL, &s1, 0, c))

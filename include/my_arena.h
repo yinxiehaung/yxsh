@@ -49,6 +49,6 @@ void arena_end_tmp(mem_tmp_arena_t *);
   ((type *)(arena_push((&arena), (sizeof(type)), set_zero, errbuf)))
 #define arena_push_arr_to_zero(arean, type, size, errbuf)                      \
   arena_push_arr(arean, type, size, 1, errbuf)
-#define arena_push_type_to_zero(arean, type, size, errbuf)                     \
+#define arena_push_type_to_zero(arean, type, errbuf)                           \
   arena_push_type(arean, type, 1, errbuf)
 #endif
