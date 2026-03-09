@@ -1,9 +1,4 @@
-target = my_shell
-CC = gcc
-SRC = src/my_arena.c src/my_string.c src/shell_parser.c src/shell_executor.c 
-CFLAG = -Wall -g -flto -o
-
-my_shell:$(SRC)
-	$(CC) $(CFLAG) $@ $^ main.c 
+all:
+	gcc build.c src/*.c -Iinclude -Wall -g -o build	
 clean:
-	rm -f *.o $(target)
+	rm -f build yxsh

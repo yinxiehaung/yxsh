@@ -1,4 +1,4 @@
-#include "../include/shell.h"
+#include "yxsh_internal.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <stdbool.h>

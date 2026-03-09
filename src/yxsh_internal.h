@@ -1,7 +1,7 @@
-#ifndef SHELL_H
-#define SHELL_H
-#include "my_arena.h"
-#include "my_string.h"
+#ifndef YXSH_INTERNAL_H
+#define YXSH_INTERNAL_H
+#include "../include/my_arena.h"
+#include "../include/my_string.h"
 #include <sys/wait.h>
 #include <unistd.h>
 

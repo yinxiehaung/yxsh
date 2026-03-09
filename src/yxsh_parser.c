@@ -1,4 +1,4 @@
-#include "../include/shell.h"
+#include "yxsh_internal.h"
 
 // #define DEBUG_MODE_TOKENIZE
 // #define DEBUG_MODE_PARSING

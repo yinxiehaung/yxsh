@@ -1,4 +1,4 @@
-#include "include/shell.h"
+#include "include/yxsh_core.h"
 
 #define MAX_COMMAND_SIZE (1024 * sizeof(char))
 
@@ -13,15 +13,7 @@ int main(void) {
     char buffer[MAX_COMMAND_SIZE];
     if (fgets(buffer, MAX_COMMAND_SIZE, stdin)) {
       buffer[strcspn(buffer, "\n")] = '\0';
-      string_t command = str_new_variable_in(arena, buffer);
-      if (str_cmp_char(&command, "exit")) {
-        break;
-      }
-      shell_token_list_t *list = shell_tokenize(&arena, &command);
-      shell_AST_t *root = shell_parser(&arena, list);
-      if (root != NULL) {
-        status = shell_executor(&arena, root, status);
-      }
+      status = yxsh_run(&arena, buffer, status);
     } else {
       printf("\n");
       break;
