@@ -18,7 +18,7 @@ static char *str_to_cstr(mem_arena_t *arena, string_t *str) {
 static int buildin_exit(exe_ctx_t *ctx, shell_AST_t *ast) { exit(0); }
 static int buildin_setenv(exe_ctx_t *ctx, shell_AST_t *ast) {
   if (ast->argc >= 3) {
-    setenv(ast->argv[0].str, ast->argv[2].str, 1);
+    setenv(ast->argv[1].str, ast->argv[2].str, 1);
   }
   return 0;
 }
