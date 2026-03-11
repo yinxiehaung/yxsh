@@ -119,6 +119,11 @@ static void lex_symbol_state(lexer_ctx_t *ctx) {
       symbol_len = 2;
     }
     break;
+  case ';':
+    if (*(tmp + 1) == ';') {
+      symbol_len = 2;
+    }
+    break;
   default:
     ctx->state = TOKEN_ILLEGAL;
     break;
@@ -266,7 +271,9 @@ shell_token_list_t *shell_tokenize(mem_arena_t *arena, string_t *command) {
 
 static shell_AST_t *parsing_command(parser_ctx_t *ctx) {
   shell_token_t *cursor = ctx->curr_token;
-
+  if (cursor == NULL) {
+    return NULL;
+  }
   if (str_cmp_char(&cursor->key, "&&") || str_cmp_char(&cursor->key, "||") ||
       str_cmp_char(&cursor->key, "|") || str_cmp_char(&cursor->key, "&")) {
     fprintf(stderr, "yxsh: syntax error near unexpected token `%s`\n",

@@ -197,6 +197,8 @@ void __str_cat_str_to(mem_arena_t *arena, string_t *s1, ui64 index,
 }
 
 bool str_cmp_char(const string_t *s, const char *c) {
+  if (s == NULL || s->str == NULL)
+    return false;
   int c_len = strlen(c);
   if (s->len != c_len) {
     return false;
@@ -205,6 +207,8 @@ bool str_cmp_char(const string_t *s, const char *c) {
 }
 
 bool str_cmp_str(const string_t *s1, const string_t *s2) {
+  if (s1 == NULL || s1->str == NULL || s2 == NULL || s2->str == NULL)
+    return false;
   if (s1->len != s2->len) {
     return false;
   }
