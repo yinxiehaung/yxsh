@@ -465,3 +465,10 @@ string_t __str_trim(mem_arena_t *arena, string_t *s) {
   }
   return __str_substr(arena, s, start, end + 1);
 }
+
+char *str_to_cstr(mem_arena_t *arena, string_t *str) {
+  char *c_str = arena_push_arr(*arena, char, str->len + 1, 1, NULL);
+  memcpy(c_str, str->str, str->len);
+  c_str[str->len] = '\0';
+  return c_str;
+}

@@ -48,6 +48,7 @@ typedef enum {
   STR_FIND_BRUTE
 } str_find_e;
 
+char *str_to_cstr(mem_arena_t *, string_t *);
 string_t str_new_internal(mem_arena_t *, const char *, ui64);
 void __str_free(string_t *);
 

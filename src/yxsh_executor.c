@@ -1,19 +1,8 @@
 #include "yxsh_internal.h"
-#include <ctype.h>
-#include <fcntl.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 typedef int (*buildin_func_t)(exe_ctx_t *ctx, shell_AST_t *ast);
-
-static char *str_to_cstr(mem_arena_t *arena, string_t *str) {
-  char *c_str = arena_push_arr(*arena, char, str->len + 1, 1, NULL);
-  memcpy(c_str, str->str, str->len);
-  c_str[str->len] = '\0';
-  return c_str;
-}
 
 static int buildin_exit(exe_ctx_t *ctx, shell_AST_t *ast) { exit(0); }
 static int buildin_setenv(exe_ctx_t *ctx, shell_AST_t *ast) {
@@ -74,107 +63,13 @@ static int str_execvp(mem_arena_t *arena, string_t *argv, ui64 argc) {
   return execvp(c_argv[0], c_argv);
 }
 
-static void expand_tilde(exp_ctx_t *ctx) {
-  char *s = ctx->cursor;
-  if (s[0] == '~') {
-    if (ctx->orig_str->len == 1 || s[1] == '/') {
-      char *home = getenv("HOME");
-      if (home)
-        ctx->res = str_new_variable_in(*ctx->arena, home);
-      s++;
-    } else if (ctx->orig_str->len >= 2 && s[1] == '+' &&
-               (ctx->orig_str->len == 2 || s[2] == '/')) {
-      char *pwd = getenv("PWD");
-      if (pwd)
-        ctx->res = str_new_variable_in(*ctx->arena, pwd);
-      s += 2;
-    } else if (ctx->orig_str->len >= 2 && s[1] == '-' &&
-               (ctx->orig_str->len == 2 || s[2] == '/')) {
-      char *oldpwd = getenv("OLDPWD");
-      if (oldpwd)
-        ctx->res = str_new_variable_in(*ctx->arena, oldpwd);
-      s += 2;
-    }
-  }
-  ctx->cursor = s;
-}
-
-static void expand_dollar(exp_ctx_t *ctx) {
-  ctx->cursor++;
-  if (!CHAR_IN_STR(ctx->cursor, ctx->orig_str)) {
-    str_cat_char_to_end_in(*ctx->arena, ctx->res, "$");
-    return;
-  }
-
-  if (*ctx->cursor == '?') {
-    char buf[16];
-    sprintf(buf, "%d", ctx->exit_status);
-    str_cat_char_to_end_in(*ctx->arena, ctx->res, buf);
-    ctx->cursor++;
-  } else if (isalpha(*ctx->cursor) || *ctx->cursor == '_') {
-    char *curr = ctx->cursor;
-    while (CHAR_IN_STR(curr, ctx->orig_str) &&
-           (isalnum(*curr) || *curr == '_')) {
-      curr++;
-    }
-    string_t str = {.str = ctx->cursor,
-                    .alloc = 0,
-                    .len = curr - ctx->cursor,
-                    .is_arena = false};
-    char *key = str_to_cstr(ctx->arena, &str);
-    if (key != NULL) {
-      char *val = getenv(key);
-      if (val)
-        str_cat_char_to_end_in(*ctx->arena, ctx->res, val);
-    }
-    ctx->cursor = curr;
-  } else {
-    str_cat_char_to_end_in(*ctx->arena, ctx->res, "$");
-    char c[2] = {*ctx->cursor, '\0'};
-    str_cat_char_to_end_in(*ctx->arena, ctx->res, c);
-    ctx->cursor++;
-  }
-}
-static string_t shell_expand(exe_ctx_t *exe_ctx, string_t *orig_str) {
-  if (orig_str->str == NULL || orig_str->len == 0) {
-    return INIT_STRING;
-  }
-  exp_ctx_t ctx = {.arena = exe_ctx->arena,
-                   .exit_status = exe_ctx->exit_status,
-                   .cursor = orig_str->str,
-                   .in_double_quote = false,
-                   .in_single_quote = false,
-                   .orig_str = orig_str,
-                   .res = str_new_static_in(*exe_ctx->arena, "")};
-  expand_tilde(&ctx);
-  while (CHAR_IN_STR(ctx.cursor, ctx.orig_str)) {
-    char c[2] = {*ctx.cursor, '\0'};
-    if (c[0] == '\'' && !ctx.in_double_quote) {
-      ctx.in_single_quote = !ctx.in_single_quote;
-      ctx.cursor++;
-      continue;
-    } else if (c[0] == '\"' && !ctx.in_single_quote) {
-      ctx.in_double_quote = !ctx.in_double_quote;
-      ctx.cursor++;
-      continue;
-    }
-    if (c[0] == '$' && !ctx.in_single_quote) {
-      expand_dollar(&ctx);
-      continue;
-    }
-    str_cat_char_to_end_in(*ctx.arena, ctx.res, c);
-    ctx.cursor++;
-  }
-  return ctx.res;
-}
-
 static void proc_status(exe_ctx_t *ctx, int status) {
   if (WIFEXITED(status)) {
-    ctx->exit_status = WEXITSTATUS(status);
+    ctx->status->exit_status = WEXITSTATUS(status);
   } else if (WIFSIGNALED(status)) {
-    ctx->exit_status = 128 + WTERMSIG(status);
+    ctx->status->exit_status = 128 + WTERMSIG(status);
   } else {
-    ctx->exit_status = -1;
+    ctx->status->exit_status = -1;
   }
 }
 
@@ -213,8 +108,8 @@ static void __exe_command(exe_ctx_t *ctx, shell_AST_t *ast) {
 static int check_and_run_internal_command(exe_ctx_t *ctx, shell_AST_t *ast) {
   for (int i = 0; buildin[i].name != NULL; i++) {
     if (str_cmp_char(&ast->argv[0], buildin[i].name)) {
-      ctx->exit_status = buildin[i].func(ctx, ast);
-      return ctx->exit_status;
+      ctx->status->exit_status = buildin[i].func(ctx, ast);
+      return ctx->status->exit_status;
     }
   }
   return -1;
@@ -234,10 +129,39 @@ static int exe_command(exe_ctx_t *ctx, shell_AST_t *ast) {
     int status;
     waitpid(child_pid, &status, 0);
     proc_status(ctx, status);
-    return ctx->exit_status;
+    return ctx->status->exit_status;
   }
   perror("fork error");
   return -1;
+}
+
+static int exe_num_pipe(exe_ctx_t *ctx, shell_AST_t *ast) {
+  int pipefd[2];
+  pipe(pipefd);
+
+  pid_t child_pid = fork();
+  if (child_pid == -1) {
+    perror("fork error");
+    return -1;
+  } else if (child_pid == 0) {
+    if (ctx->status->pipe_buffer[ctx->status->command_counter % NUM_PIPE_MAX] ==
+        -1) {
+      dup2(pipefd[0],
+           ctx->status
+               ->pipe_buffer[ctx->status->command_counter % NUM_PIPE_MAX]);
+    }
+    dup2(pipefd[1], STDOUT_FILENO);
+    ctx->status->pipe_buffer[ctx->status->command_counter % NUM_PIPE_MAX] =
+        pipefd[1];
+    close(pipefd[0]);
+    exit(execute_ast(ctx, ast));
+  }
+  close(pipefd[0]);
+  close(pipefd[1]);
+  int child_status;
+  waitpid(child_pid, &child_status, 0);
+  proc_status(ctx, child_status);
+  return ctx->status->exit_status;
 }
 
 static int exe_pipe(exe_ctx_t *ctx, shell_AST_t *ast) {
@@ -272,7 +196,7 @@ static int exe_pipe(exe_ctx_t *ctx, shell_AST_t *ast) {
   waitpid(left_pid, &left_status, 0);
   waitpid(right_pid, &right_status, 0);
   proc_status(ctx, right_status);
-  return ctx->exit_status;
+  return ctx->status->exit_status;
 }
 
 static int exe_and_or(exe_ctx_t *ctx, shell_AST_t *ast) {
@@ -281,6 +205,9 @@ static int exe_and_or(exe_ctx_t *ctx, shell_AST_t *ast) {
     return left_status;
   }
   if (ast->state == AST_NODE_OR && left_status == 0) {
+    return left_status;
+  }
+  if (ast->right == NULL) {
     return left_status;
   }
   return execute_ast(ctx, ast->right);
@@ -292,7 +219,7 @@ static int exe_list(exe_ctx_t *ctx, shell_AST_t *ast) {
     if (ast->right != NULL) {
       return execute_ast(ctx, ast->right);
     }
-    return ctx->exit_status;
+    return ctx->status->exit_status;
   } else if (ast->state == AST_NODE_AND) {
     pid_t bg_pid = fork();
     if (bg_pid == 0) {
@@ -302,11 +229,11 @@ static int exe_list(exe_ctx_t *ctx, shell_AST_t *ast) {
       exit(execute_ast(ctx, ast->left));
     } else if (bg_pid > 0) {
       printf("[1] %d\n", bg_pid);
-      ctx->exit_status = 0;
+      ctx->status->exit_status = 0;
       return 0;
     }
   }
-  return ctx->exit_status;
+  return ctx->status->exit_status;
 }
 
 static int execute_ast(exe_ctx_t *ctx, shell_AST_t *root) {
@@ -315,6 +242,8 @@ static int execute_ast(exe_ctx_t *ctx, shell_AST_t *root) {
     return exe_command(ctx, root);
   case AST_NODE_PIPE:
     return exe_pipe(ctx, root);
+  case AST_NODE_NUMBER_PIPE:
+    return exe_num_pipe(ctx, root);
   case AST_NODE_OR:
   case AST_NODE_DOUBLE_AND:
     return exe_and_or(ctx, root);
@@ -324,11 +253,12 @@ static int execute_ast(exe_ctx_t *ctx, shell_AST_t *root) {
   default:
     break;
   }
-  return ctx->exit_status;
+  return ctx->status->exit_status;
 }
 
-int shell_executor(mem_arena_t *arena, shell_AST_t *root, int prev_status) {
-  exe_ctx_t ctx = {.arena = arena, .exit_status = prev_status};
+int shell_executor(mem_arena_t *arena, shell_AST_t *root,
+                   command_status_t *prev_status) {
+  exe_ctx_t ctx = {.arena = arena, .status = prev_status};
   if (root == NULL)
     return -1;
   return execute_ast(&ctx, root);
