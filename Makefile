@@ -12,9 +12,10 @@ OBJS = $(patsubst $(YXSH_SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
 all: $(TARGET)
 
 clean:
-	rm $(OBJ_DIR)/*.o $(TARGET)
+	rm -rf $(OBJ_DIR) $(TARGET)
 
 $(TARGET):$(OBJS)
 	$(CC) $(CFLAG) $^ main.c -o $@
 $(OBJ_DIR)/%.o:$(YXSH_SRC_DIR)/%.c
+	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAG) -c $< -o $@
