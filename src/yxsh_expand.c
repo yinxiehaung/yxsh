@@ -61,17 +61,17 @@ static void expand_dollar(exp_ctx_t *ctx) {
     ctx->cursor++;
   }
 }
-string_t shell_expand(exe_ctx_t *exe_ctx, string_t *orig_str) {
+string_t shell_expand(shell_ctx_t *exe_ctx, string_t *orig_str) {
   if (orig_str->str == NULL || orig_str->len == 0) {
     return INIT_STRING;
   }
-  exp_ctx_t ctx = {.arena = exe_ctx->arena,
-                   .exit_status = exe_ctx->status->exit_status,
+  exp_ctx_t ctx = {.arena = &exe_ctx->arena,
+                   .exit_status = exe_ctx->exit_status,
                    .cursor = orig_str->str,
                    .in_double_quote = false,
                    .in_single_quote = false,
                    .orig_str = orig_str,
-                   .res = str_new_static_in(*exe_ctx->arena, "")};
+                   .res = str_new_static_in(exe_ctx->arena, "")};
   expand_tilde(&ctx);
   while (CHAR_IN_STR(ctx.cursor, ctx.orig_str)) {
     char c[2] = {*ctx.cursor, '\0'};

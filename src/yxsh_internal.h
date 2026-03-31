@@ -1,7 +1,6 @@
 #ifndef YXSH_INTERNAL_H
 #define YXSH_INTERNAL_H
-#include "../include/my_arena.h"
-#include "../include/my_string.h"
+#include "../include/yxsh_core.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -9,7 +8,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define NUM_PIPE_MAX 1024
 #define CHAR_IN_STR(c, s) ((c) - (*(s)).str < ((*(s)).len))
 
 typedef struct shell_token_s shell_token_t;
@@ -19,7 +17,6 @@ typedef struct lexer_ctx_s lexer_ctx_t;
 typedef struct parser_ctx_s parser_ctx_t;
 typedef struct exp_ctx_s exp_ctx_t;
 typedef struct exe_ctx_s exe_ctx_t;
-typedef struct command_status_s command_status_t;
 typedef bool (*lex_rule_fnp_t)(char c);
 
 enum shell_token_type_e {
@@ -95,20 +92,9 @@ struct exp_ctx_s {
   string_t res;
 };
 
-struct command_status_s {
-  int exit_status;
-  int pipe_buffer[NUM_PIPE_MAX];
-  ui64 command_counter;
-};
-
-struct exe_ctx_s {
-  mem_arena_t *arena;
-  command_status_t *status;
-};
-
 extern char **environ;
 shell_token_list_t *shell_tokenize(mem_arena_t *, string_t *);
 shell_AST_t *shell_parser(mem_arena_t *, shell_token_list_t *);
-string_t shell_expand(exe_ctx_t *, string_t *);
-int shell_executor(mem_arena_t *, shell_AST_t *, command_status_t *);
+string_t shell_expand(shell_ctx_t *, string_t *);
+int shell_executor(shell_AST_t *, shell_ctx_t *);
 #endif

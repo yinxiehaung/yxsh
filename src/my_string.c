@@ -40,8 +40,8 @@ string_t str_new_internal(mem_arena_t *arena, const char *s, ui64 s_len) {
 
   if (s != NULL && s_len != 0) {
     memcpy(str.str, s, s_len);
+    str.str[s_len] = '\0';
   }
-  str.str[s_len] = '\0';
   return str;
 }
 

@@ -1,25 +1,26 @@
+#include "include/my_string.h"
 #include "include/yxsh_core.h"
 
 #define MAX_COMMAND_SIZE (1024 * sizeof(char))
 
 int main(void) {
-  mem_arena_t arena = INIT_ARENA;
+  shell_ctx_t gctx;
   char errbuf[1024];
-  arena_init(&arena, MiB(1), errbuf);
-  int status = 0;
+  init_shell_ctx(&gctx, MiB(1), errbuf);
   while (1) {
-    printf("$ ");
-    mem_tmp_arena_t tmp_arena = arena_begin_tmp(&arena);
+    printf("[%ld]$ ", gctx.command_counter);
+    mem_tmp_arena_t tmp_arena = arena_begin_tmp(&gctx.arena);
     char buffer[MAX_COMMAND_SIZE];
     if (fgets(buffer, MAX_COMMAND_SIZE, stdin)) {
       buffer[strcspn(buffer, "\n")] = '\0';
-      status = yxsh_run(&arena, buffer, status);
+      gctx.command = str_new_variable_in(gctx.arena, buffer);
+      gctx.exit_status = yxsh_run(&gctx);
     } else {
       printf("\n");
       break;
     }
     arena_end_tmp(&tmp_arena);
   }
-  arena_free(&arena);
+  arena_free(&gctx.arena);
   return 0;
 }
