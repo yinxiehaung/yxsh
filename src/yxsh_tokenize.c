@@ -1,6 +1,6 @@
 #include "yxsh_internal.h"
 
-#define DEBUG_MODE_TOKENIZE
+// #define DEBUG_MODE_TOKENIZE
 
 static bool is_white_space(char c) {
   return c == '\t' || c == '\r' || c == ' ' || c == '\n' || c == '\0';

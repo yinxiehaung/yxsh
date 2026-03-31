@@ -1,6 +1,6 @@
 #include "yxsh_internal.h"
 
-#define DEBUG_MODE_PARSING
+// #define DEBUG_MODE_PARSING
 
 static shell_AST_t *parsing_command(parser_ctx_t *ctx) {
   shell_token_t *cursor = ctx->curr_token;
