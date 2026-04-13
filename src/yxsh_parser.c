@@ -84,9 +84,12 @@ static shell_AST_t *__parsing_number_pipe(parser_ctx_t *ctx,
   char num[5] = {};
   memcpy(num, &ctx->curr_token->key.str[1], ctx->curr_token->key.len - 1);
   num[4] = '\0';
-  root->pipe_num = atoi(num) % NUM_PIPE_MAX;
-  root->state = AST_NODE_NUMBER_PIPE;
-  return root;
+  shell_AST_t *num_pipe_ast =
+      arena_push_type(*ctx->arena, shell_AST_t, 1, NULL);
+  num_pipe_ast->state = AST_NODE_NUMBER_PIPE;
+  num_pipe_ast->pipe_num = atoi(num) % NUM_PIPE_MAX;
+  num_pipe_ast->left = root;
+  return num_pipe_ast;
 }
 
 static shell_AST_t *parsing_pipe(parser_ctx_t *ctx) {

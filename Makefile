@@ -2,7 +2,7 @@ TARGET = yxsh
 YXSH_SRC_DIR = src
 YXSH_INCLUDE_DIR = include
 CFLAG = -Wall -g -O3 -I$(YXSH_INCLUDE_DIR)
-OBJ_DIR = bin
+OBJ_DIR = object
 CC = gcc
 
 SRCS = $(wildcard $(YXSH_SRC_DIR)/*.c)

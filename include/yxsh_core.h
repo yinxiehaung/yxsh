@@ -3,7 +3,7 @@
 #include "my_arena.h"
 #include "my_string.h"
 
-#define NUM_PIPE_MAX 1024
+#define NUM_PIPE_MAX 128
 typedef struct shell_ctx_s shell_ctx_t;
 
 struct shell_ctx_s {

@@ -8,7 +8,7 @@ int main(void) {
   char errbuf[1024];
   init_shell_ctx(&gctx, MiB(1), errbuf);
   while (1) {
-    printf("[%ld]$ ", gctx.command_counter);
+    printf("[%ld]%%", gctx.command_counter);
     mem_tmp_arena_t tmp_arena = arena_begin_tmp(&gctx.arena);
     char buffer[MAX_COMMAND_SIZE];
     if (fgets(buffer, MAX_COMMAND_SIZE, stdin)) {

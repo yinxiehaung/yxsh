@@ -164,12 +164,12 @@ static int exe_num_pipe(shell_ctx_t *ctx, shell_AST_t *ast) {
         ctx->pipe_buffer[i][1] = -1;
       }
     }
-    exit(exe_command(ctx, ast));
-  } else {
-    int status;
-    waitpid(pid, &status, 0);
-    proc_status(ctx, status);
+    exit(execute_ast(ctx, ast->left));
   }
+  if (ctx->pipe_buffer[target_index][1] != -1) {
+    close(ctx->pipe_buffer[target_index][1]);
+  }
+  ctx->exit_status = 0;
   return ctx->exit_status;
 }
 
@@ -273,7 +273,6 @@ int shell_executor(shell_AST_t *root, shell_ctx_t *ctx) {
   int orig_stdout = dup(STDOUT_FILENO);
 
   if (ctx->pipe_buffer[curr_index][0] != -1) {
-    printf("1");
     dup2(ctx->pipe_buffer[curr_index][0], STDIN_FILENO);
     close(ctx->pipe_buffer[curr_index][0]);
     close(ctx->pipe_buffer[curr_index][1]);
@@ -282,6 +281,9 @@ int shell_executor(shell_AST_t *root, shell_ctx_t *ctx) {
   }
 
   int status = execute_ast(ctx, root);
+  if (status != 127) {
+    ctx->command_counter++;
+  }
   dup2(orig_stdin, STDIN_FILENO);
   dup2(orig_stdout, STDOUT_FILENO);
   close(orig_stdin);
