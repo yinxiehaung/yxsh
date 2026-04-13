@@ -274,15 +274,15 @@ int shell_executor(shell_AST_t *root, shell_ctx_t *ctx) {
 
   if (ctx->pipe_buffer[curr_index][0] != -1) {
     dup2(ctx->pipe_buffer[curr_index][0], STDIN_FILENO);
-    close(ctx->pipe_buffer[curr_index][0]);
     close(ctx->pipe_buffer[curr_index][1]);
-    ctx->pipe_buffer[curr_index][0] = -1;
     ctx->pipe_buffer[curr_index][1] = -1;
   }
 
   int status = execute_ast(ctx, root);
   if (status != 127) {
     ctx->command_counter++;
+    close(ctx->pipe_buffer[curr_index][0]);
+    ctx->pipe_buffer[curr_index][0] = -1;
   }
   dup2(orig_stdin, STDIN_FILENO);
   dup2(orig_stdout, STDOUT_FILENO);
